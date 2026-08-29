@@ -1,0 +1,251 @@
+{% extends 'base.html' %}
+{% block title %}后台管理{% endblock %}
+{% block content %}
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>活动管理</h2>
+        <a href="/admin/logout" class="btn btn-danger" style="background:#6c757d">退出登录</a>
+    </div>
+    <hr>
+
+    <h3>新建活动</h3>
+    <form method="POST" action="/admin/activity/create" id="createForm">
+        <label>活动代码 (全英文，用于URL)：</label>
+        <input type="text" name="code" placeholder="例: summer2026" required pattern="[a-zA-Z0-9]+">
+
+        <label>活动名称：</label>
+        <input type="text" name="name" placeholder="例: 夏日大促抢券" required>
+
+        <label>每手机号最大抢券次数：</label>
+        <input type="number" name="max_grab_count" min="1" value="1" required>
+
+        <label>活动时间 (格式: YYYY-MM-DD HH:MM-HH:MM，多日用英文逗号分隔)：</label>
+        <textarea name="times" rows="3" placeholder="2026-08-26 10:00-12:00, 2026-08-27 14:00-16:00" required></textarea>
+
+        <label>图文说明（会显示在活动页顶部）：</label>
+        <div id="editor-toolbar" style="border:1px solid #ccc; border-bottom:none; border-radius:4px 4px 0 0;"></div>
+        <div id="editor" style="border:1px solid #ccc; border-top:none; border-radius:0 0 4px 4px; min-height:350px;"></div>
+        <input type="hidden" name="rich_text" id="rich_text_input">
+
+        <hr>
+
+        <h4>🎁 奖品设置（概率合计 ≤ 1 即可，差额为未中奖概率；活动总名额 = 各奖品数量之和）</h4>
+        <table id="prizeTable" border="1" cellpadding="5" style="border-collapse: collapse; min-width: 600px;">
+            <thead>
+                <tr style="background:#f0f0f0;">
+                    <th>名次</th><th>券名（来自远程券库）</th><th>中奖概率(0~1)</th><th>发放数量</th><th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <button type="button" class="btn" style="margin-top:8px;" onclick="addPrizeRow()">➕ 添加奖品</button>
+        <div style="margin-top:8px; font-weight:bold;">
+            当前概率合计：<span id="probTotal">0</span> / 1
+            <span id="probTip"></span>
+            ｜ 活动总名额：<span id="stockTotal">0</span>
+        </div>
+
+        <br>
+        <button class="btn btn-success" type="submit">创建活动</button>
+    </form>
+
+    <h3>活动列表</h3>
+    <table>
+        <tr>
+            <th>活动代码</th><th>名称</th><th>奖品(剩余/总库存)</th>
+            <th>奖品数</th><th>次数上限</th>
+            <th>活动链接</th><th>操作</th>
+        </tr>
+        {% for act in activities %}
+        <tr>
+            <td>{{ act.code }}</td>
+            <td>{{ act.name }}</td>
+            <td>{{ stats[act.id].remain }} / {{ stats[act.id].total }}</td>
+            <td>{{ stats[act.id].prize_count }}</td>
+            <td>{{ act.max_grab_count or '-' }}</td>
+            <td>
+                <a href="{{ url_for('view_activity', code=act.code, _external=True) }}" target="_blank"
+                   class="btn" style="background:#17a2b8; padding:2px 8px; font-size:12px; text-decoration:none;">
+                    打开活动页
+                </a>
+            </td>
+            <td>
+                <a href="/admin/activity/detail/{{ act.id }}" class="btn" style="background:#17a2b8; padding:2px 8px; font-size:12px;">详情</a>
+                <form method="POST" action="/admin/activity/delete/{{ act.id }}" style="display:inline;"
+                      onsubmit="return confirm('确定删除该活动及所有登记记录？');">
+                    <button type="submit" class="btn btn-danger" style="padding:2px 8px; font-size:12px;">删除</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">暂无活动</td></tr>
+        {% endfor %}
+    </table>
+
+    <!-- ===== wangEditor ===== -->
+    <link href="https://cdn.jsdelivr.net/npm/@wangeditor/editor@5.1.23/dist/css/style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@wangeditor/editor@5.1.23/dist/index.js"></script>
+
+    <style>
+        form label { display:block; margin-top:10px; font-weight:bold; }
+        form input[type=text], form input[type=number], form textarea {
+            width: 100%; max-width: 500px; padding: 6px;
+        }
+        #prizeTable td { padding: 4px 6px; }
+        .prob-ok { color:green; } .prob-bad { color:red; }
+    </style>
+
+    <script>
+        // ========== 富文本编辑器 ==========
+        let editor = null;
+        let editorHTML = '';   // 内容缓存
+
+        function createMyEditor() {
+            const W = window.wangEditor;
+            if (!W) return;
+            if (editor) {
+                try { editorHTML = editor.getHtml(); } catch (e) {}
+                try { editor.destroy(); } catch (e) {}
+                editor = null;
+            }
+            editor = W.createEditor({
+                selector: '#editor',
+                html: editorHTML,
+                mode: 'default',
+                config: {
+                    placeholder: '请输入图文说明...',
+                    onChange(ed) { editorHTML = ed.getHtml(); },
+                    MENU_CONF: {
+                        uploadImage: {
+                            async customUpload(file, insertFn) {
+                                const fd = new FormData();
+                                fd.append('file', file);
+                                try {
+                                    const resp = await fetch('/admin/upload_image', { method: 'POST', body: fd });
+                                    const d = await resp.json();
+                                    if (d.success) insertFn(d.url, file.name, d.url);
+                                    else alert('上传失败：' + (d.msg || '未知错误'));
+                                } catch (err) { alert('上传失败，请检查网络'); }
+                            },
+                            maxFileSize: 5 * 1024 * 1024,
+                            allowedFileTypes: ['image/*']
+                        }
+                    }
+                }
+            });
+            W.createToolbar({ editor, selector: '#editor-toolbar', mode: 'default' });
+            window._editor = editor;
+        }
+
+        createMyEditor()
+        
+        // ========== 远程券名下拉 ==========
+        let couponNameOptions = '<option value="">--加载中--</option>';
+        fetch('/admin/coupon_names')
+            .then(r => r.json())
+            .then(d => {
+                if (d.names && d.names.length) {
+                    couponNameOptions = d.names.map(n =>
+                        `<option value="${n}">${n}</option>`).join('');
+                    refreshSelects();
+                } else {
+                    couponNameOptions = '<option value="">未获取到券名</option>';
+                }
+            })
+            .catch(() => { couponNameOptions = '<option value="">加载失败</option>'; });
+
+        function refreshSelects() {
+            document.querySelectorAll('.coupon-name-sel').forEach(sel => {
+                if (sel.value === '') sel.innerHTML = couponNameOptions;
+            });
+        }
+
+        // ========== 奖品行增删 ==========
+        let rankSeq = 0;
+        function addPrizeRow() {
+            rankSeq++;
+            const tbody = document.querySelector('#prizeTable tbody');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${rankSeq}等奖</td>
+                <td><select class="coupon-name-sel" style="width:180px;">${couponNameOptions}</select></td>
+                <td><input type="number" step="0.01" min="0" max="1" class="prob-input"
+                        value="0" style="width:80px;" oninput="updateTotals()"></td>
+                <td><input type="number" min="1" class="stock-input" value="10" style="width:70px;" oninput="updateTotals()"></td>
+                <td><button type="button" onclick="this.closest('tr').remove(); updateTotals(); renumberRanks();">删除</button></td>`;
+            tbody.appendChild(tr);
+            updateTotals();
+        }
+
+        function renumberRanks() {
+            rankSeq = 0;
+            document.querySelectorAll('#prizeTable tbody tr').forEach(tr => {
+                rankSeq++;
+                tr.cells[0].innerText = `${rankSeq}等奖`;
+            });
+        }
+
+        // ========== 实时合计（概率 + 库存） ==========
+        function updateTotals() {
+            let t = 0, s = 0;
+            document.querySelectorAll('.prob-input').forEach(i => t += parseFloat(i.value || 0));
+            document.querySelectorAll('.stock-input').forEach(i => s += parseInt(i.value || 0));
+            t = Math.round(t * 10000) / 10000;
+            document.getElementById('probTotal').innerText = t.toFixed(2);
+            document.getElementById('stockTotal').innerText = s;
+
+            const tipEl = document.getElementById('probTip');
+            if (t > 1 + 0.0001) {
+                tipEl.innerHTML = `⚠️ 超出上限，必须 ≤ 1`;
+                tipEl.className = 'prob-bad';
+            } else if (t > 0) {
+                tipEl.innerHTML = `✅ 合规，未中奖概率 ${(parseFloat((1 - t).toFixed(4)) * 100).toFixed(0)}%`;
+                tipEl.className = 'prob-ok';
+            } else {
+                tipEl.innerHTML = '';
+                tipEl.className = '';
+            }
+        }
+
+        // ========== 提交前组装 + 校验 ==========
+        document.getElementById('createForm').addEventListener('submit', function (e) {
+            const rows = document.querySelectorAll('#prizeTable tbody tr');
+            if (rows.length === 0) {
+                e.preventDefault();
+                alert('至少要添加一个奖品！');
+                return;
+            }
+
+            let t = 0;
+            let prizes = [];
+            let hasEmptyName = false, hasBadStock = false;
+            rows.forEach((tr, idx) => {
+                const prob = parseFloat(tr.querySelector('.prob-input').value || 0);
+                const stock = parseInt(tr.querySelector('.stock-input').value || 0);
+                const name = tr.querySelector('.coupon-name-sel').value;
+                t += prob;
+                if (!name) hasEmptyName = true;
+                if (stock <= 0) hasBadStock = true;
+                prizes.push({
+                    rank_no: idx + 1,
+                    coupon_name: name,
+                    probability: prob,
+                    stock: stock
+                });
+            });
+            t = Math.round(t * 10000) / 10000;
+
+            if (hasEmptyName) { e.preventDefault(); alert('有奖品未选择券名！'); return; }
+            if (hasBadStock)  { e.preventDefault(); alert('每个奖品的发放数量必须大于 0！'); return; }
+            if (t > 1 + 0.0001) { e.preventDefault(); alert(`概率合计为 ${t.toFixed(2)}，不能超过 1！`); return; }
+            if (t <= 0) { e.preventDefault(); alert('至少一个奖品的概率要大于 0！'); return; }
+
+            document.getElementById('rich_text_input').value = editorHTML || '';
+
+            let input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'prizes_json';
+            input.value = JSON.stringify(prizes);
+            this.appendChild(input);
+        });
+    </script>
+{% endblock %}

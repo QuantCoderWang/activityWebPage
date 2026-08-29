@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}活动抢券系统{% endblock %}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; background: #007bff; color: #fff; text-decoration: none; display: inline-block; }
+        .btn-danger { background: #dc3545; }
+        .btn-success { background: #28a745; }
+        input, textarea { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .alert { padding: 15px; background: #f8d7da; color: #721c24; border-radius: 4px; margin-bottom: 15px; }
+
+        @keyframes shake {
+            0%, 100% { transform: rotate(0deg); }
+            15% { transform: rotate(-12deg) translateX(-4px); }
+            30% { transform: rotate(12deg) translateX(4px); }
+            45% { transform: rotate(-10deg) translateX(-3px); }
+            60% { transform: rotate(10deg) translateX(3px); }
+            75% { transform: rotate(-6deg); }
+            90% { transform: rotate(6deg); }
+        }
+        .shaking {
+            animation: shake 0.15s linear infinite;
+        }
+        .richtext_container {
+            max-width: 100%;
+            overflow: hidden;          /* 兜底：任何溢出内容直接裁掉 */
+            word-break: break-word;    /* 长英文串/URL 也强制换行 */
+        }
+        .richtext_container img {
+            max-width: 100%;           /* 图片最宽不超过容器 */
+            height: auto;              /* 等比缩放，不变形 */
+            display: block;            /* 消除图片底部的基线空隙 */
+            margin: 8px 0;
+            border-radius: 4px;
+        }
+        .richtext_container video,
+        .richtext_container iframe {
+            max-width: 100%;
+        }
+        .notice-tip {
+            background: #fff8e6;          /* 淡黄底 */
+            border-left: 4px solid #f0a300; /* 左侧橙色竖条，经典“注意”视觉 */
+            padding: 8px 12px;
+            margin: 8px 0 15px 0;
+            font-size: 13px;
+            color: #8a6100;
+            border-radius: 0 4px 4px 0;
+            line-height: 1.6;
+        }
+
+        @keyframes shake-btn {
+            0%,100% { transform: rotate(0); }
+            20% { transform: rotate(-8deg) scale(1.03); }
+            40% { transform: rotate(8deg); }
+            60% { transform: rotate(-6deg) scale(1.03); }
+            80% { transform: rotate(6deg); }
+        }
+        .shaking { animation: shake-btn .25s linear infinite; }
+
+        @keyframes pop-in {
+            from { transform: scale(.6); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .result-pop { animation: pop-in .3s ease-out; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# 安装必要库：pip install -r requirements.txt
+# ===== Web 框架 =====
+Flask==3.0.3
+
+# ===== 数据库操作 =====
+mysql-connector-python==8.4.0
+PyMySQL==1.1.0
+Flask-SQLAlchemy==3.1.1
+
+# ===== 国密 SM4 加密解密 =====
+cryptography==42.0.8
+
+# ===== 生产环境运行容器 =====
+# linux服务器部署用gunicorn
+# gunicorn==21.2.0
+waitress==3.0.0

@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+{% block title %}活动详情{% endblock %}
+{% block content %}
+    <a href="/admin" class="btn" style="background:#6c757d; margin-bottom:15px;">返回列表</a>
+    <h2>{{ activity.name }} - 详情</h2>
+    <p><strong>活动代码：</strong>{{ activity.code }}</p>
+    <p><strong>活动时间：</strong>{{ activity.times }}</p>
+    <p><strong>总名额：</strong>{{ prize_total_stock }}个奖品（已消耗 {{ prize_granted }}个）</p>
+    <p><strong>每手机号最大抢券次数：</strong>{{ activity.max_grab_count or 1 }} 次</p>
+
+    <!-- ===== 统计概览 ===== -->
+    {% set win_count = regs | selectattr('is_win') | list | length %}
+    <div style="display:flex; gap:15px; margin:15px 0;">
+        <div style="flex:1; background:#eef5ff; padding:12px; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:bold;">{{ regs|length }}</div>
+            <div style="color:#666; font-size:13px;">总抢券次数</div>
+        </div>
+        <div style="flex:1; background:#fff7e6; padding:12px; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:bold; color:#e6a23c;">{{ win_count }}</div>
+            <div style="color:#666; font-size:13px;">中奖记录数</div>
+        </div>
+        <div style="flex:1; background:#f0fff4; padding:12px; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:bold; color:#28a745;">{{ regs|length - win_count }}</div>
+            <div style="color:#666; font-size:13px;">未中奖记录数</div>
+        </div>
+        <div style="flex:1; background:#fdf0f5; padding:12px; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:bold; color:#e05a8a;">{{ registered_phones }}</div>
+            <div style="color:#666; font-size:13px;">参与人数（已去重）</div>
+        </div>
+    </div>
+
+    <!-- ===== 奖品配置一览 ===== -->
+    <h3>🎁 奖品设置</h3>
+    <table>
+        <tr><th>名次</th><th>券名</th><th>库存</th><th>已发出</th><th>中奖概率</th></tr>
+        {% for prize in prizes %}
+        <tr>
+            <td> {{ prize.rank_no }} 等奖</td>
+            <td>{{ prize.coupon_name }}</td>
+            <td>{{ prize.stock }}</td>
+            <td>{{ prize.granted }}</td>
+            <td>{{ (prize.probability * 100) | round(2) }}%</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">该活动未配置奖品</td></tr>
+        {% endfor %}
+    </table>
+
+    <hr>
+    <h3>✏️ 编辑奖品 / 图文说明</h3>
+    <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:20px;">
+        <table id="editPrizeTable" border="1" cellpadding="6" style="border-collapse:collapse; min-width:600px;">
+            <thead>
+                <tr style="background:#f0f0f0;">
+                    <th>名次</th><th>券名</th>
+                    <th>中奖概率(0~1)</th><th>库存</th><th>已发出（下限）</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prize in prizes %}
+                <tr data-prize-id="{{ prize.id }}">
+                    <td> {{ prize.rank_no }} 等奖</td>
+                    <td>{{ prize.coupon_name }}</td>
+                    <td><input type="number" step="0.0001" min="0" max="1" class="edit-prob"
+                            value="{{ prize.probability }}" style="width:90px;"></td>
+                    <td><input type="number" min="{{ prize.granted }}" class="edit-stock"
+                            value="{{ prize.stock }}" style="width:80px;"></td>
+                    <td>{{ prize.granted }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="margin-top:8px; font-weight:bold;">
+            概率合计：<span id="editProbTotal">0</span> / 1
+            <span id="editProbTip"></span>
+        </div>
+
+        <p style="margin:15px 0 5px; font-weight:bold;">图文说明：</p>
+        <div id="detail-toolbar" style="border:1px solid #ccc; border-bottom:none; border-radius:4px 4px 0 0; background:#fff;"></div>
+        <div id="detail-editor" style="border:1px solid #ccc; border-top:none; border-radius:0 0 4px 4px; min-height:250px; background:#fff;"></div>
+        
+        <button class="btn btn-success" style="margin-top:15px;" onclick="saveDetailEdit()">💾 保存修改</button>
+        <span id="save_result" style="margin-left:10px;"></span>
+    </div>
+
+    <!-- ===== 抢券记录明细 ===== -->
+    <h3>领券情况明细</h3>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>手机号</th>
+            <th>是否商城注册</th>
+            <th>是否中奖</th>
+            <th>获得的券</th>
+            <th>抢券时间</th>
+        </tr>
+        {% for reg in regs %}
+        <tr {% if reg.is_win %}style="background:#fffbe6;"{% endif %}>
+            <td>{{ reg.id }}</td>
+            <td>{{ reg.phone }}</td>
+            <td>
+                {% if reg.is_registered_mall %}
+                    <span style="color:green;">是</span>
+                {% else %}
+                    <span style="color:red;">否</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if reg.is_win %}
+                    <span style="color:#e6a23c; font-weight:bold;">✅ 中奖</span>
+                {% else %}
+                    <span style="color:#909399;">未中奖</span>
+                {% endif %}
+            </td>
+            <td>{{ reg.prize_name or '—' }}</td>
+            <td>{{ reg.register_time }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">暂无登记记录</td></tr>
+        {% endfor %}
+    </table>
+
+    <link href="https://cdn.jsdelivr.net/npm/@wangeditor/editor@5.1.23/dist/css/style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@wangeditor/editor@5.1.23/dist/index.js"></script>
+
+    <script>
+        // 库存下限：不低于已发出
+        document.querySelectorAll('.edit-stock').forEach(inp => {
+            inp.addEventListener('input', () => {
+                const min = parseInt(inp.min);
+                if (parseInt(inp.value) < min) {
+                    inp.value = min;
+                    alert(`库存不能低于已发出数量（${min}）`);
+                }
+                updateEditTotal();
+            });
+        });
+
+        function updateEditTotal() {
+            let t = 0;
+            document.querySelectorAll('.edit-prob').forEach(i => t += parseFloat(i.value || 0));
+            t = Math.round(t * 10000) / 10000;
+            document.getElementById('editProbTotal').innerText = t.toFixed(4);
+            const tip = document.getElementById('editProbTip');
+            if (t > 1.0001) { tip.innerText = '⚠️ 超过1，非法'; tip.style.color = 'red'; }
+            else if (t > 0) { tip.innerText = `✅ 未中奖概率 ${(parseFloat((1 - t).toFixed(4)) * 100).toFixed(0)}%`; tip.style.color = 'green'; }
+            else { tip.innerText = ''; }
+            return t;
+        }
+        document.querySelectorAll('.edit-prob').forEach(i => i.addEventListener('input', updateEditTotal));
+        updateEditTotal();
+
+        // 图文编辑器
+        let detailEditor = null;
+        window.addEventListener('load', () => {
+            const W = window.wangEditor;
+            if (!W) return;
+            detailEditor = W.createEditor({
+                selector: '#detail-editor',
+                html: {{ activity.rich_text | tojson }},// 载入已写入内容
+                mode: 'default',
+                config: {
+                    placeholder: '暂无图文说明，可在此编辑...',
+                    MENU_CONF: {
+                        uploadImage: {
+                            async customUpload(file, insertFn) {
+                                const fd = new FormData();
+                                fd.append('file', file);
+                                const resp = await fetch('/admin/upload_image', { method: 'POST', body: fd });
+                                const d = await resp.json();
+                                if (d.success) insertFn(d.url, file.name, d.url);
+                                else alert('上传失败：' + (d.msg || ''));
+                            },
+                            maxFileSize: 5 * 1024 * 1024
+                        }
+                    }
+                }
+            });
+            W.createToolbar({ editor: detailEditor, selector: '#detail-toolbar', mode: 'default' });
+        });
+
+        function saveDetailEdit() {
+            const total = updateEditTotal();
+            if (total > 1.0001) { alert('概率合计超过1，请修正后再保存'); return; }
+
+            const prizes = [];
+            let bad = false;
+            document.querySelectorAll('#editPrizeTable tbody tr').forEach(tr => {
+                const stock = parseInt(tr.querySelector('.edit-stock').value || 0);
+                const granted = parseInt(tr.querySelector('.edit-stock').min);
+                if (stock < granted) bad = true;
+                prizes.push({
+                    id: parseInt(tr.dataset.prizeId),
+                    probability: parseFloat(tr.querySelector('.edit-prob').value || 0),
+                    stock: stock
+                });
+            });
+            if (bad) { alert('存在库存低于已发出数量的奖品，请修正'); return; }
+
+            fetch('/admin/update_activity_detail', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    activity_code: '{{ activity.code }}',
+                    rich_text: detailEditor ? detailEditor.getHtml() : '',
+                    prizes: prizes
+                })
+            })
+            .then(r => r.json())
+            .then(d => {
+                const el = document.getElementById('save_result');
+                if (d.success) { el.innerText = '✅ 已保存'; el.style.color = 'green';
+                    setTimeout(() => location.reload(), 800); }
+                else { el.innerText = '❌ ' + d.msg; el.style.color = 'red'; }
+            })
+            .catch(() => alert('网络错误'));
+        }
+    </script>
+{% endblock %}
